@@ -1,0 +1,258 @@
+---
+title: "Projekt"
+output: pdf_document
+date: "2023-02-02"
+---
+
+Autorki: Anna Dąbkowska, Aleksandra Gomulak
+
+```{r}
+library(dplyr)
+library(ggplot2)
+install.packages("RColorBrewer")
+library("RColorBrewer")
+```
+
+Wykorzystujemy dane o ludzkiej pamięci i kognicji. Zgłębione zostały ludzkie procesy poznawcze. Zawierają one informacje od osób, które opowiedziały historię: prawdziwą(recalled), wymyśloną(imagined) oraz prawdziwą historię opowiedzianą ponownie(retold). Po wykonanym zadaniu, zapytane zostały o ich wrażenia z zadania.
+
+W projekcie zakładamy poziom istotności 0.05.
+
+Zanim przejdziemy do opisu zmiennych, kilka z nich usuniemy z oryginalnego zbioru - uznałyśmy, że nie są one istotne, a dzięki usunięciu ich, tabela będzie bardziej przejrzysta. Usuwamy np. ID osoby wykonującej zadanie czy historię, którą opowiedziała.
+
+```{r}
+data <- read.csv("hippoCorpusV2.csv")
+```
+
+```{r}
+drop <- c("AssignmentId", "WorkerId", "mainEvent", "recAgnPairId", "recImgPairId", "story", "summary", "similarityReason", "mostSurprising")
+data <- data[ , !names(data) %in% drop]
+```
+
+**Zmienne**
+
++---------------------+---------------------------------------------------------------------------------------------------+
+| zmienna             | opis                                                                                              |
++:====================+===================================================================================================+
+| `WorkTimeInSeconds` | czas wykonania zadania (sekundy)                                                                  |
++---------------------+---------------------------------------------------------------------------------------------------+
+| `annotatorAge`      | dolna granica wieku osoby wykonującej zadanie (granice: 18-24, \                                  |
+|                     | 25-29, 30-34, 35-39, 40-44, 45-49, 50-54, 55+)                                                    |
++---------------------+---------------------------------------------------------------------------------------------------+
+| `annotatorGender`   | płeć osoby wykonującej zadanie                                                                    |
++---------------------+---------------------------------------------------------------------------------------------------+
+| `annotatorRace`     | rasa osoby wykonującej zadanie                                                                    |
++---------------------+---------------------------------------------------------------------------------------------------+
+| `distracted`        | jak bardzo osoby wykonująca test była rozkojarzona (1-5 w skali Likert'a)                         |
++---------------------+---------------------------------------------------------------------------------------------------+
+| `draining`          | jak bardzo osobę wykonującą zadanie wykończyło emocjonalnie jego wykonywanie (skala Likert'a)     |
++---------------------+---------------------------------------------------------------------------------------------------+
+| `frequency`         | jak często osoba wykonująca zadanie myśli/mówi o opowiadanym wydarzeniu (skala Likert'a)          |
++---------------------+---------------------------------------------------------------------------------------------------+
+| `importance`        | jak ważne dla osoby wykonującej zadanie, było to zdarzenie (skala Likert'a)                       |
++---------------------+---------------------------------------------------------------------------------------------------+
+| `memType`           | rodzaj historii (prawdziwa, wymyślona, prawdziwa opowiedziana ponownie)                           |
++---------------------+---------------------------------------------------------------------------------------------------+
+| `openness`          | ciągła zmienna opisująca otwartość osoby wykonującej zadanie \                                    |
+|                     | do opowiedzenia historii                                                                          |
++---------------------+---------------------------------------------------------------------------------------------------+
+| `similarity`        | jak bardzo opowiedziana historia/wspomnienie podobne są do życia osoby wykonującej zadanie        |
++---------------------+---------------------------------------------------------------------------------------------------+
+| `stressful`         | jak bardzo stresujące dla osoby wykonującej zadanie było przeprowadzenie badania (skala Likert'a) |
++---------------------+---------------------------------------------------------------------------------------------------+
+| `timeSinceEvent`    | czas, który minął od momentu wydarzenia opowiedzianego wspomnienia (dni)                          |
++---------------------+---------------------------------------------------------------------------------------------------+
+| `logTimeSinceEvent` | zlogarytmowany czas, który minął od momentu wydarzenia opowiedzianego wspomnienia                 |
++---------------------+---------------------------------------------------------------------------------------------------+
+
+**Hipotezy**\
+
+1.  Wraz ze wzrostem wieku badanego oraz jego ocenie zadania na płaszczyźnie *draining*\
+    i *stressful*, wzrasta *importance* przetwarzanego wydarzenia.\
+
+2.  *WorkTimeInSeconds* zależy od typu aktywności - czy historia była wspominana, ponownie opowiedzona czy wyobrażona.\
+
+3.  Wraz ze wzrostem *importance* - czas wykonania zadania maleje.\
+
+    Dodatkowo: *WorkTimeInSeconds* zależy od *logTimeSinceEvent* - im dawniej to się wydarzyło, tym dłużej zajmuje opowiedzenie.
+
+**Badania eksploracyjne danych**\
+Usuwamy wiersze z brakującymi danymi o wieku badanych, a także wadze zdarzenia, jako że stanowią niewielką część naszych danych, a pozostałe dane w tych kolumnach mogą zawierać znaczące informacje o zmiennych docelowych.\
+Od tego momentu używać będziemy obiektu typu dataframe zamiast danych wczytanych\
+z pliku typu csv.
+
+```{r}
+df <- data.frame(data)
+df <- df[complete.cases(df$annotatorAge),]
+df <- df[complete.cases(df$importance),]
+df <- df[complete.cases(df$timeSinceEvent),]
+```
+
+Sprawdzamy, czy występują brakujące wartości.
+
+```{r}
+lapply(lapply(df, is.na), sum)
+```
+
+*similarity* oraz *frequency* posiadają dużo braków, jest to jednak zrozumiałe, ponieważ zależą one od typu opowiedzianego zdarzenia. Jeżeli osoba wymyśliła historię, zrozumiałe jest, że wcześniej o tym nie myślała, zatem *frequency* nie istnieje.
+
+Wizualizujemy rozkład *timeSinceEvent*.
+
+```{r}
+print(max(df$timeSinceEvent))
+ggplot(df, aes(x=timeSinceEvent)) + geom_histogram(colour = 8, fill = "white", bins = 10)
+```
+
+Przyjmujemy, że usuwamy dane o okresie od momentu wydarzenia (*timeSinceEvent*) przekraczające 20000 dni (54 lata).
+
+```{r}
+df <- subset(df, timeSinceEvent < 20000) 
+print(max(df$timeSinceEvent))
+print(min(df$timeSinceEvent))
+```
+
+```{r}
+ggplot(df, aes(x=timeSinceEvent)) + geom_histogram(colour = 8, fill = "white", bins = 25)
+```
+
+```{r}
+ggplot(df, aes(x=logTimeSinceEvent)) + geom_histogram(colour = 8, fill = "white", bins = 20)
+```
+
+Nadpisujemy zmienną *logTimeSinceEvent* logarytmem wyczyszczonych danych *TimeSinceEvent* (obcięty ogon).
+
+```{r}
+df$logTimeSinceEvent <- log(df$timeSinceEvent)
+```
+
+Rozkład *WorkTimeInSeconds*.
+
+```{r}
+ggplot(df, aes(x=WorkTimeInSeconds)) + geom_histogram(colour = 8, fill = "white", bins = 20)
+```
+
+Sprawdzamy, ilu osobom wykonanie zadania zajęłoo dłużej niż 8000 sekund (133.33 minuty).
+
+```{r}
+print(sum(df$WorkTimeInSeconds >8000 ))
+```
+
+Ponieważ jest to jedynie 69 osób, nie bierzemy ich pod uwagę.
+
+```{r}
+df <- subset(df, WorkTimeInSeconds < 8000)
+```
+
+```{r}
+ggplot(df, aes(x=openness)) + geom_histogram(colour = 8, fill = "white", bins = 15)
+```
+
+Widzimy, że dane *openness* nie są zbalansowane, mimo tego nic w nich nie zmieniamy.
+
+```{r}
+ggplot(df, aes(x=annotatorAge)) + geom_histogram(colour = 8, fill = "white", bins = 15)
+```
+
+Rozkład wieku zbliżony jest do rozkładu normalnego.
+
+```{r}
+print(unique(df$annotatorRace))
+```
+
+Pomimo tego, że *hispanic* czy *middleEastern* to nie rasy, a etniczności, nie zmieniamy ich ani\
+nie usuwamy. Domyślamy się, że nazwanie zmiennej jako rasa było skrótem myślowym badających.
+
+Sprawdzamy korelację numerycznych zmiennych.
+
+```{r}
+cor(df[sapply(df,is.numeric)])
+```
+
+-   lekka dodatnia korelacja *importance* i *annotatorAge*, *draining*, *stressful*
+
+-   lekka ujemna korelacja *openness* z *distracted*, *stressful*, *draining*
+
+-   tak jak można się spodziewać *draining* jest mocno skorelowane dodatnio ze *stressful*
+
+**Hipoteza 1**
+
+```{r}
+summary(lm(importance ~ annotatorAge * draining * stressful, df))
+```
+
+Potwierdzamy hipotezę, że wzrost *wieku* i *draining* wpływają na wzrost *importance* zdarzenia oraz nie możemy stwierdzić, czy *stressful* także wpływa na wzrost *importance*.
+
+```{r}
+summary(lm(annotatorAge ~ importance * draining, df))
+```
+
+Zauważamy, że wraz ze wzrostem *draining* i *importance*, wzrasta wiek badanej osoby.\
+Jako że przedziały wiekowe są następujące: 18-24, 25-29, 30-34, 35-39, 40-44, 45-49, 50-54, 55+, a my traktujemy dolne ich granice jako liczby całkowite (integer), to:
+
+-   wraz z wzrostem importance o 1 w skali 1-5, wiek badanego wzrasta średnio o prawie jeden rok (0.93777)
+
+-   wraz z wzrostem draining o 1 w skali 1-5, wiek badanego wzrasta średnio o prawie pół roku (0.45155)
+
+**Hipoteza 2**
+
+```{r}
+ggplot(df, aes(x = WorkTimeInSeconds)) + geom_histogram(binwidth = 30, aes(fill = memType),position='identity',alpha=0.4)
+```
+
+Badamy interakcję ze zmiennymi *annotatorAge* oraz *openness*.
+
+```{r}
+interaction.plot(trace.factor = df$annotatorAge,
+                 x.factor = df$memType,
+                 response = df$WorkTimeInSeconds,
+                 fun = median,
+                 lwd = 3.5,
+                 col = brewer.pal(n = 8, name = "Spectral"),
+                 fixed = TRUE)
+```
+
+```{r}
+summary(lm(WorkTimeInSeconds ~ memType * annotatorAge * openness, df))
+```
+
+Wniosek 1: W modelu z interakcjami rodzaj opowiedzianej historii nie jest istotny statystycznie.
+
+Wniosek 2: Wraz ze wzrostem *wieku* o 1 rok *retold* zajmowało średnio ok. 15 sekund mniej.
+
+Wniosek 3: Wraz ze wzrostem *openness,* zadanie zajęło średnio 1301 sekund krócej, gdy historia była *recalled* a nie imagined oraz średnio 524 sekundy krócej, gdy była *retold*\
+a nie imagined.
+
+**Hipoteza 3**\
+Ponieważ duża część naszych zmiennych to ocena w skali Likert'a, zamieniamy\
+je na zmienną kategoryczną porządkową.
+
+```{r}
+df$draining <- factor(df$draining, ordered = TRUE)
+df$stressful <- factor(df$stressful, ordered = TRUE)
+df$distracted <- factor(df$distracted, ordered = TRUE)
+df$importance <- factor(df$importance, ordered = TRUE)
+df$frequency <- factor(df$frequency, ordered = TRUE)
+df$similarity <- factor(df$similarity, ordered = TRUE)
+```
+
+Używamy analizy wariancji.
+
+```{r}
+aov(WorkTimeInSeconds ~ importance, df)
+summary(aov(WorkTimeInSeconds ~ importance, df))
+```
+
+Sama ANOVA nie mówi nam jednak, jak wyglądają różnice między zmianą *importance*.\
+Do zwizualizowania korzystamy z testu Tukcey'a.
+
+```{r}
+TukeyHSD(aov(WorkTimeInSeconds ~ importance, df))
+```
+
+Na początku zakładałyśmy, że *TimeSinceEvent* może mieć duże znaczenie dla *WorkTimeInSeconds*.
+
+```{r}
+summary(lm(WorkTimeInSeconds ~ timeSinceEvent, df))
+```
+
+Jak widać po p-value równym 0.116, nie jest tak, jak zakładałyśmy. Było to dla nas zaskoczeniem, ponieważ byłyśmy pewne, że im starsze historia, tym dłuższy czas opowiedzenia (być może ciężej przypomnieć sobie szczegóły).\
+Pokazuje to, jak ważnym jest, nie ufanie ślepo swojej intuicji i wykonanie analizy danych.
